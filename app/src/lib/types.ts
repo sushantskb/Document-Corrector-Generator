@@ -68,6 +68,9 @@ export interface Job {
   logs?: JobLog[]
   correctedHtmlUrl?: string
   generatedHtmlUrl?: string
+  imageMap?: { name: string; src: string; cdnUrl?: string; cdnUploaded?: boolean }[]
+  imageUrlBase?: string
+  imageStartNumber?: number
   startedAt?: string
   completedAt?: string
   error?: string

@@ -72,6 +72,12 @@ export interface IJob extends MongooseDocument {
   correctedHtmlUrl?: string
   /** A fresh HTML rendition generated straight from the PDF. */
   generatedHtmlUrl?: string
+  /** Delivery names for the figures the pipeline added (kerla_new_NN.png → hosted source). */
+  imageMap?: { name: string; src: string; cdnUrl?: string; cdnUploaded?: boolean }[]
+  /** CDN base the deliverable's image URLs are written against. */
+  imageUrlBase?: string
+  /** Book-wide continuous numbering: where this chapter's image numbers begin. */
+  imageStartNumber?: number
   startedAt: Date
   completedAt?: Date
   error?: string
@@ -168,6 +174,15 @@ const JobSchema = new Schema<IJob>(
     logs: { type: [JobLogSchema], default: [] },
     correctedHtmlUrl: { type: String },
     generatedHtmlUrl: { type: String },
+    imageMap: {
+      type: [new Schema(
+        { name: String, src: String, cdnUrl: String, cdnUploaded: Boolean },
+        { _id: false }
+      )],
+      default: undefined,
+    },
+    imageUrlBase: { type: String },
+    imageStartNumber: { type: Number },
     startedAt: { type: Date },
     completedAt: { type: Date },
     error: { type: String },

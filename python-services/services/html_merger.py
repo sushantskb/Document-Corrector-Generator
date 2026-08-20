@@ -304,6 +304,7 @@ class HTMLMerger:
                 import base64
                 src = "data:image/png;base64," + base64.b64encode(data).decode("ascii")
             img_tag["src"] = src
+            img_tag["data-dcp-fig"] = "1"
             rescued += 1
         if rescued:
             logger.info("[merge] %s placeholder(s) rescued with a region render "
@@ -398,6 +399,8 @@ class HTMLMerger:
             if not src:
                 continue
             target["src"] = src
+            if target.name == "img":
+                target["data-dcp-fig"] = "1"
             for attribute in ("srcset", "data-src", "data-srcset"):
                 if target.has_attr(attribute):
                     del target[attribute]
@@ -719,6 +722,7 @@ class HTMLMerger:
             return None
         figure = self.soup.new_tag("figure")
         img = self.soup.new_tag("img", src=src, loading="lazy")
+        img["data-dcp-fig"] = "1"
         if height_em:
             figure["class"] = "duo-fig"
             img["style"] = f"height:{height_em}em;width:auto;max-width:100%"

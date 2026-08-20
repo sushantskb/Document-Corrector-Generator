@@ -22,7 +22,9 @@ from models.models import (
 from services.cloudinary_client import CloudinaryClient
 from services.comparison_engine import ComparisonEngine
 from services.correction_engine import AUTO_FIX_THRESHOLD, CorrectionEngine
+from services.cdn_uploader import push_images_to_cdn, rewrite_to_cdn
 from services.html_analyzer import HTMLAnalyzer
+from services.html_generator import CDN_IMAGE_BASE, assign_cdn_names
 from services.pdf_analyzer import PDFAnalyzer
 from services.verification_engine import VerificationEngine
 from utils.file_utils import (
@@ -199,7 +201,12 @@ class ProcessingPipeline:
         #    from the PDF — for enriched HTML that never mirrored the PDF,
         #    patching has a ceiling and this is the usable deliverable ------- 92%
         await self._progress("publishing", 90)
-        corrected_url = await self.publish(corrected_html)
+        # Delivery spec: added images carry continuous kerla_new_NN names on the
+        # CDN URL base. One map is shared by both deliverables so a figure that
+        # appears in each keeps a single name; the complete rendition is named
+        # first because it is the file that gets submitted.
+        image_map: List[Dict[str, str]] = []
+        image_start = await self._image_start_number()
         generated_url = await self.generate_from_pdf(
             pdf_analysis,
             source_html=source_html,
@@ -207,7 +214,14 @@ class ProcessingPipeline:
             panel_paths=html_analyzer.hidden_content,
             issues=issues,
             region_renderer=pdf_analyzer.render_region,
+            image_map=image_map,
+            image_start=image_start,
         )
+        corrected_html = assign_cdn_names(
+            corrected_html, image_map, start=image_start) or corrected_html
+        await push_images_to_cdn(image_map)
+        corrected_html = rewrite_to_cdn(corrected_html, image_map) or corrected_html
+        corrected_url = await self.publish(corrected_html)
 
         # 9. report and persistence --------------------------------------- 100%
         elapsed_ms = int((time.monotonic() - self.started) * 1000)
@@ -235,6 +249,8 @@ class ProcessingPipeline:
             "completedAt": _now(),
             "correctedHtmlUrl": corrected_url,
             "generatedHtmlUrl": generated_url,
+            "imageMap": image_map,
+            "imageUrlBase": CDN_IMAGE_BASE,
             "issuesFound": len(issues),
             "issuesAutoFixed": auto_fixed,
             "issuesNeedingReview": report.needs_review,
@@ -301,10 +317,24 @@ class ProcessingPipeline:
     async def publish(self, html: str) -> Optional[str]:
         return await publish_html(html, self.job_id, self.uploader)
 
+    async def _image_start_number(self) -> int:
+        """Where this chapter's continuous image numbering begins.
+
+        Numbering must not restart between chapters of a book, so the reviewer
+        can set `imageStartNumber` on the job (e.g. 4 when the previous chapter
+        ended at kerla_new_03).
+        """
+        try:
+            job = await self.store.get_job(self.job_id) or {}
+            return max(1, int(job.get("imageStartNumber") or 1))
+        except Exception:
+            return 1
+
     async def generate_from_pdf(self, pdf_analysis, source_html=None,
                                 comparison_engine=None,
                                 panel_paths=None, issues=None,
-                                region_renderer=None) -> Optional[str]:
+                                region_renderer=None,
+                                image_map=None, image_start=1) -> Optional[str]:
         """Build and publish the complete rendition.
 
         Preferred: merge the PDF's missing content into the uploaded HTML's own
@@ -336,6 +366,12 @@ class ProcessingPipeline:
             except Exception:      # an add-on must never fail the job
                 logger.exception("job %s: PDF-to-HTML generation failed", self.job_id)
                 return None
+        if image_map is not None:
+            html = assign_cdn_names(html, image_map, start=image_start) or html
+            # figures live on the publisher's CDN from here on, so the stored
+            # document (and its in-app preview) reference the delivery URLs
+            await push_images_to_cdn(image_map)
+            html = rewrite_to_cdn(html, image_map) or html
         result = await self.uploader.upload_html(
             html, public_id=f"generated-{self.job_id}", subfolder="generated",
         )
@@ -433,7 +469,15 @@ class ReviewService:
             unstick_paths=job.get("unstickPaths") or [],
         )
         patch = await corrector.patch_html(issues, approved=approved, rejected=rejected)
-        corrected_url = await publish_html(patch["html"], self.job_id, self.uploader)
+        # Keep the delivery names stable across rebuilds: continue the map the
+        # original run built, so a figure never changes its kerla_new_NN name.
+        image_map = list(job.get("imageMap") or [])
+        image_start = max(1, int(job.get("imageStartNumber") or 1))
+        rebuilt_html = assign_cdn_names(
+            patch["html"], image_map, start=image_start) or patch["html"]
+        await push_images_to_cdn(image_map)
+        rebuilt_html = rewrite_to_cdn(rebuilt_html, image_map) or rebuilt_html
+        corrected_url = await publish_html(rebuilt_html, self.job_id, self.uploader)
 
         from services.job_sync import correction_document, issue_document
 
@@ -455,6 +499,8 @@ class ReviewService:
         ])
         await self.store.upsert_job_state(self.job_id, {
             "correctedHtmlUrl": corrected_url,
+            "imageMap": image_map,
+            "imageUrlBase": CDN_IMAGE_BASE,
             "issuesAutoFixed": len(patch["applied"]),
             "rebuiltAt": _now(),
         })

@@ -161,7 +161,7 @@ def job_document(state: Dict[str, Any]) -> Dict[str, Any]:
     for key in ("status", "progress", "error", "startedAt", "completedAt"):
         if key in state:
             update[key] = state[key]      # None is meaningful here: it clears the field
-    for url_field in ("correctedHtmlUrl", "generatedHtmlUrl"):
+    for url_field in ("correctedHtmlUrl", "generatedHtmlUrl", "imageMap", "imageUrlBase"):
         if state.get(url_field):
             # never blank an existing document link because an update omits it
             update[url_field] = state[url_field]

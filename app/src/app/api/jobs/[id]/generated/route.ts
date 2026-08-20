@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { connectDB } from '@/lib/mongodb'
+import { applyCdnImageUrls } from '@/lib/cdn'
 import { Job } from '@/lib/models'
 
 /**
@@ -36,7 +37,11 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
     const inline = request.nextUrl.searchParams.get('inline') === '1'
     const filename = `generated-${String(job._id).slice(-8)}.html`
 
-    return new NextResponse(html, {
+    // The downloaded deliverable must reference images by their CDN names;
+    // the inline preview keeps the hosted sources so images render now.
+    const output = inline ? html : applyCdnImageUrls(html, job.imageMap, job.imageUrlBase)
+
+    return new NextResponse(output, {
       headers: {
         'Content-Type': 'text/html; charset=utf-8',
         'Content-Disposition': `${inline ? 'inline' : 'attachment'}; filename="${filename}"`,

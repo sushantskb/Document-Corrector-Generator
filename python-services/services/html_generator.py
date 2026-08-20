@@ -461,8 +461,8 @@ class HTMLGenerator:
         sizing = (f' style="height:{height_em}em;width:auto;max-width:100%"'
                   if height_em else "")
         klass = ' class="duo-fig"' if height_em else ""
-        return (f'<figure{klass}><img src="{src}" alt="{alt}" loading="lazy"{sizing}>'
-                f"{caption}</figure>")
+        return (f'<figure{klass}><img src="{src}" alt="{alt}" loading="lazy"'
+                f' data-dcp-fig="1"{sizing}>{caption}</figure>')
 
     async def _host(self, image: ImageElement) -> Optional[str]:
         if image.cloudinary_url:
@@ -546,3 +546,59 @@ def strip_blank_placeholders(soup) -> int:
 def _clip(text: str, limit: int) -> str:
     text = text.strip()
     return text if len(text) <= limit else text[: limit - 1] + "…"
+
+
+# The publisher's delivery instructions require every image *added* to an HTML
+# to be referenced by a CDN URL with a continuous, book-wide numbered name
+# (kerla_new_01.png, kerla_new_02.png, ... — numbering never restarts per
+# chapter). The deliverable is exported with these URLs; the working copies
+# keep their hosted sources so previews render before the CDN upload happens.
+CDN_IMAGE_BASE = os.getenv(
+    "IMAGE_URL_BASE",
+    "https://d1xu9delcvinxy.cloudfront.net/kerala_v2/html-images/",
+)
+CDN_IMAGE_PREFIX = os.getenv("IMAGE_NAME_PREFIX", "kerla_new_")
+
+# Every figure this platform adds is uploaded under this folder, so the marker
+# also catches images inserted by earlier runs or the correction engine.
+_ADDED_FIGURE_SRC_MARKER = "document-correction/figures/"
+
+
+def _is_added_figure(img) -> bool:
+    if img.get("data-dcp-fig"):
+        return True
+    return _ADDED_FIGURE_SRC_MARKER in (img.get("src") or "")
+
+
+def assign_cdn_names(html: Optional[str], mapping: List[Dict[str, str]],
+                     *, start: int = 1) -> Optional[str]:
+    """Give each added figure its delivery name, continuing `mapping`.
+
+    `mapping` is shared across a job's deliverables (and across rebuilds), so
+    the same figure keeps the same name everywhere and numbering stays
+    continuous. `start` lets a later chapter continue the book's sequence.
+    Each image's tag gets a `data-cdn-name` attribute; the downloaded
+    deliverable rewrites `src` to CDN_IMAGE_BASE + name using the mapping.
+    """
+    if not html:
+        return html
+    from bs4 import BeautifulSoup
+
+    soup = BeautifulSoup(html, "lxml")
+    by_src = {entry["src"]: entry for entry in mapping}
+    next_number = start + len(mapping)
+    changed = False
+    for img in soup.find_all("img"):
+        src = img.get("src") or ""
+        if not src or src.startswith("data:") or not _is_added_figure(img):
+            continue
+        entry = by_src.get(src)
+        if entry is None:
+            name = f"{CDN_IMAGE_PREFIX}{next_number:02d}.png"
+            next_number += 1
+            entry = {"name": name, "src": src, "cdnUrl": CDN_IMAGE_BASE + name}
+            by_src[src] = entry
+            mapping.append(entry)
+        img["data-cdn-name"] = entry["name"]
+        changed = True
+    return str(soup) if changed else html

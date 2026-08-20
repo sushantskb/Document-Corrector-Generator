@@ -11,6 +11,7 @@ import {
   Clock,
   Download,
   FileText,
+  Image as ImageIcon,
   ListChecks,
   RotateCcw,
   Terminal,
@@ -165,6 +166,15 @@ export default function JobStatus() {
                     className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-border px-3 text-sm font-medium text-foreground transition hover:bg-surface-hover"
                   >
                     <Download size={15} /> Corrected HTML
+                  </a>
+                )}
+                {(job.imageMap?.length ?? 0) > 0 && (
+                  <a
+                    href={`/api/jobs/${jobId}/images`}
+                    title={`${job.imageMap!.length} added image(s) named ${job.imageMap![0].name}… — upload these to the CDN so the deliverable's image URLs resolve`}
+                    className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-border px-3 text-sm font-medium text-foreground transition hover:bg-surface-hover"
+                  >
+                    <ImageIcon size={15} /> Images ({job.imageMap!.length})
                   </a>
                 )}
                 <ButtonLink href={`/projects/${projectId}/jobs/${jobId}/issues`} variant="secondary" size="sm">

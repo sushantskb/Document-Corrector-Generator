@@ -468,3 +468,31 @@ Two rules keep the loop honest under concurrent use:
 * **Unchanged issues are not rewritten.** Each document carries a digest of its
   own content, so a rebuild touches only what actually changed instead of
   restamping hundreds of rows and losing when each was really reviewed.
+
+## Delivery conventions (publisher's instructions)
+
+Every image the pipeline **adds** to an HTML follows the delivery spec:
+
+* Downloaded deliverables reference added figures as
+  `IMAGE_URL_BASE` + `kerla_new_NN.png` (defaults:
+  `https://d1xu9delcvinxy.cloudfront.net/kerala_v2/html-images/` and prefix
+  `kerla_new_` — override with `IMAGE_URL_BASE` / `IMAGE_NAME_PREFIX`).
+  The stored copies keep their hosted sources so in-app previews render; the
+  rewrite happens when the file is downloaded (not with `?inline=1`).
+* Numbering is **continuous for the whole book** and never restarts per
+  chapter. Set the job's start with
+  `PATCH /api/jobs/{id}` body `{"action": "set-image-start", "imageStartNumber": 4}`
+  before processing chapter 2 when chapter 1 ended at `kerla_new_03`.
+* Right after naming, each figure is **pushed to the publisher's CDN upload
+  service** (`CDN_UPLOAD_URL`, multipart POST field `files`; set it to "" to
+  disable). Confirmed uploads make the stored documents reference the delivery
+  URLs directly, so previews and deliverables both resolve with no manual
+  step. A push failure is logged, never fatal.
+* `GET /jobs/{jobId}/image-bundle` (proxied as `/api/jobs/{id}/images`, and the
+  job page's **Images** button) returns a zip of the added figures under their
+  delivery names plus a `manifest.txt` — the manual fallback when the upload
+  service was unreachable (entries already pushed are marked in the manifest).
+* `POST /compare-structure` with `{"htmlA": <url-or-html>, "htmlB": ...}`
+  checks that the English and Malayalam renditions of a chapter share one
+  section count/sequence, question numbering and per-section image counts, and
+  lists every divergence.

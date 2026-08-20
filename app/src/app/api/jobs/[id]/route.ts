@@ -47,6 +47,18 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
       job.completedAt = undefined
       job.startedAt = new Date()
       job.logs.push({ at: new Date(), level: 'INFO', message: 'Job requeued by user' })
+    } else if (body.action === 'set-image-start') {
+      // Image numbering is continuous for the whole book: chapter 2 starts
+      // where chapter 1 ended (e.g. 4 after kerla_new_03). Takes effect on the
+      // next processing run of this job.
+      const start = Number(body.imageStartNumber)
+      if (!Number.isInteger(start) || start < 1) {
+        return NextResponse.json(
+          { error: 'imageStartNumber must be a whole number of at least 1' },
+          { status: 400 }
+        )
+      }
+      job.imageStartNumber = start
     } else {
       return NextResponse.json({ error: 'Unsupported action' }, { status: 400 })
     }

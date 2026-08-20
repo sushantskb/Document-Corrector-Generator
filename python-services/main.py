@@ -212,6 +212,92 @@ async def get_job_issues(jobId: str,
     )
 
 
+@app.get("/jobs/{jobId}/image-bundle")
+async def get_image_bundle(jobId: str):
+    """Zip of the figures this job added, named per the delivery convention.
+
+    The deliverable HTML references each added figure by its CDN URL
+    (kerla_new_NN.png on the configured base). This bundle holds those exact
+    files under those exact names, ready to upload to the CDN bucket.
+    """
+    import io
+    import zipfile
+
+    import httpx
+    from fastapi.responses import Response
+
+    store = await get_store()
+    job = await store.get_job(jobId)
+    if not job:
+        raise HTTPException(status_code=404, detail=f"job {jobId} not found")
+    mapping = job.get("imageMap") or []
+    if not mapping:
+        raise HTTPException(
+            status_code=404,
+            detail="this job added no images (or was processed before image "
+                   "naming existed — reprocess it to generate the map)",
+        )
+
+    buffer = io.BytesIO()
+    failures: List[str] = []
+    async with httpx.AsyncClient(timeout=60.0, follow_redirects=True) as client:
+        with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as archive:
+            for entry in mapping:
+                try:
+                    response = await client.get(entry["src"])
+                    response.raise_for_status()
+                    archive.writestr(entry["name"], response.content)
+                except Exception as exc:  # one bad image must not sink the bundle
+                    failures.append(f"{entry['name']}: {exc}")
+            manifest = "\n".join(
+                f"{entry['name']} -> {entry.get('cdnUrl', '')}"
+                + (" [already on CDN]" if entry.get("cdnUploaded") else "")
+                for entry in mapping
+            )
+            if failures:
+                manifest += "\n\nFAILED TO FETCH:\n" + "\n".join(failures)
+            archive.writestr("manifest.txt", manifest)
+    return Response(
+        content=buffer.getvalue(),
+        media_type="application/zip",
+        headers={"Content-Disposition": f'attachment; filename="images-{jobId}.zip"'},
+    )
+
+
+class StructureCompareRequest(BaseModel):
+    """Two renditions of one chapter: URLs or raw HTML strings."""
+    htmlA: str
+    htmlB: str
+    labelA: str = "English"
+    labelB: str = "Malayalam"
+
+
+@app.post("/compare-structure")
+async def compare_structure(request: StructureCompareRequest) -> Dict[str, Any]:
+    """Check that two language renditions share one section structure.
+
+    The delivery instructions require the English and Malayalam HTML to have
+    the same section count/sequence, question numbering and images. Pass each
+    document as a URL or as raw HTML.
+    """
+    from services.structure_compare import compare_structures
+    from utils.file_utils import download_bytes
+
+    async def load(source: str, label: str) -> str:
+        if source.lstrip().startswith(("http://", "https://")):
+            content, _ = await download_bytes(source.strip())
+            return content.decode("utf-8", errors="replace")
+        if "<" not in source:
+            raise HTTPException(status_code=400,
+                                detail=f"{label} is neither a URL nor HTML")
+        return source
+
+    html_a = await load(request.htmlA, request.labelA)
+    html_b = await load(request.htmlB, request.labelB)
+    return compare_structures(html_a, html_b,
+                              label_a=request.labelA, label_b=request.labelB)
+
+
 @app.get("/jobs/{jobId}/report")
 async def get_job_report(jobId: str) -> Dict[str, Any]:
     store = await get_store()
