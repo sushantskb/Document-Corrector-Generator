@@ -1,0 +1,32 @@
+# --- Secrets — never commit these ---------------------------------------
+.env
+.env.*
+!.env.example
+
+# --- Python (python-services) --------------------------------------------
+venv/
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# --- Next.js (app) -------------------------------------------------------
+node_modules/
+.next/
+out/
+.vercel/
+*.tsbuildinfo
+next-env.d.ts
+npm-debug.log*
+yarn-error.log*
+
+# --- Editors / OS --------------------------------------------------------
+.DS_Store
+.idea/
+.vscode/
+*.swp
+
+# --- Local artifacts -----------------------------------------------------
+*.log

@@ -1,0 +1,28 @@
+# --- API -----------------------------------------------------------------
+fastapi==0.141.1
+uvicorn==0.52.4
+pydantic==2.13.4
+python-dotenv==1.2.3
+httpx==0.28.1
+
+# --- PDF analysis --------------------------------------------------------
+pdfplumber==0.11.10
+pypdfium2==5.13.0         # watermark-free page/region rendering
+
+# --- HTML analysis -------------------------------------------------------
+beautifulsoup4==4.15.0
+lxml==6.1.2
+playwright==1.62.0        # after install run: playwright install chromium
+
+# --- Image comparison ----------------------------------------------------
+pillow==12.3.0
+imagehash==4.3.2
+scikit-image==0.26.0
+
+# --- Text comparison -----------------------------------------------------
+rapidfuzz==3.14.5
+
+# --- Storage -------------------------------------------------------------
+pymongo==4.17.0
+certifi==2026.7.22        # CA bundle for MongoDB Atlas TLS on macOS
+cloudinary==1.46.0
