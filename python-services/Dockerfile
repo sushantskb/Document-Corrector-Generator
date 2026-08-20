@@ -1,6 +1,8 @@
 # Playwright's official image ships Chromium plus every system library it
 # needs. The tag version must match playwright's version in requirements.txt.
-FROM mcr.microsoft.com/playwright/python:v1.62.0-jammy
+# The noble (Ubuntu 24.04) variant is required: jammy has Python 3.10, and
+# scikit-image 0.26.0 needs Python >= 3.11.
+FROM mcr.microsoft.com/playwright/python:v1.62.0-noble
 
 WORKDIR /app
 
